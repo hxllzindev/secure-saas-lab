@@ -7,7 +7,9 @@ FROM node:24-alpine AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 
-RUN addgroup -S aegis && adduser -S -G aegis aegis
+RUN apk upgrade --no-cache \
+    && addgroup -S aegis \
+    && adduser -S -G aegis aegis
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY --chown=aegis:aegis package.json ./
 COPY --chown=aegis:aegis src ./src
