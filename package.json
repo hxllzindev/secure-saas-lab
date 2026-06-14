@@ -1,0 +1,20 @@
+{
+  "name": "secure-saas-lab",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Laboratorio fullstack de AppSec com fluxos vulneraveis e seguros lado a lado.",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test",
+    "test:security": "node --test test/security.test.js",
+    "check": "node --check src/server.js && node --check src/public/app.js",
+    "verify:stack": "node scripts/verify-stack.mjs"
+  },
+  "dependencies": {
+    "pg": "^8.16.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,98 @@
+name: CI and security gates
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - run: npm audit --audit-level=high
+
+  semgrep:
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v6
+      - run: semgrep scan --config p/javascript --config p/owasp-top-ten --error
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2.3.9
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          load: true
+          tags: secure-saas-lab:ci
+      - uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: secure-saas-lab:ci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: 1
+      - uses: anchore/sbom-action@v0.24.0
+        with:
+          image: secure-saas-lab:ci
+          artifact-name: secure-saas-lab.spdx.json
+
+  stack-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Start isolated stack
+        run: docker compose up -d --build
+        env:
+          TOKEN_SECRET: ci-only-token-secret-with-more-than-32-characters
+      - name: Wait for healthcheck
+        run: |
+          for attempt in {1..30}; do
+            curl --fail http://127.0.0.1:3000/api/health && exit 0
+            sleep 2
+          done
+          docker compose logs
+          exit 1
+      - name: Verify application controls
+        run: node scripts/verify-stack.mjs
+      - name: Verify PostgreSQL RLS directly
+        run: |
+          visible=$(docker compose exec -T database psql \
+            postgresql://aegis_app:aegis_app_dev@127.0.0.1:5432/secure_saas \
+            -Atc "BEGIN; SELECT set_config('app.tenant_id','acme',true); SELECT count(*) FROM invoices WHERE tenant_id='orbit'; COMMIT;" \
+            | grep -E '^[0-9]+$' | tail -1)
+          test "$visible" = "0"
+      - name: Collect logs
+        if: failure()
+        run: docker compose logs
+      - name: Stop stack
+        if: always()
+        run: docker compose down -v

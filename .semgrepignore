@@ -1,0 +1,2 @@
+# Accepted risk: this single module is the deliberate stored-XSS sink used by the lab.
+src/public/vulnerable-lab.js

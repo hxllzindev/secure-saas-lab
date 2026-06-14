@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Aegis Ledger - laboratorio fullstack de seguranca para SaaS multi-tenant.">
+    <title>Aegis Ledger | Secure SaaS Lab</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark">AL</span>
+          <span>
+            <strong>Aegis Ledger</strong>
+            <small>Finance operations</small>
+          </span>
+        </div>
+
+        <nav class="primary-nav" aria-label="Navegacao principal">
+          <button class="nav-item active" type="button" data-target="overview">Visao geral</button>
+          <button class="nav-item" type="button" data-target="invoices">Faturas</button>
+          <button class="nav-item" type="button" data-target="notes">Notas</button>
+          <button class="nav-item" type="button" data-target="audit">Auditoria</button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <span class="connection-dot" aria-hidden="true"></span>
+          <span>Laboratorio local</span>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Workspace multi-tenant</p>
+            <h1>Visao geral</h1>
+          </div>
+
+          <div class="topbar-actions">
+            <div class="mode-control" role="group" aria-label="Ambiente da aplicacao">
+              <button type="button" data-mode="vulnerable">Vulneravel</button>
+              <button class="active" type="button" data-mode="secure">Seguro</button>
+            </div>
+            <div class="user-chip" id="user-chip">
+              <span class="avatar">AS</span>
+              <span>
+                <strong>Visitante</strong>
+                <small>Sem sessao</small>
+              </span>
+            </div>
+            <button class="button button-quiet hidden" id="logout-button" type="button">Sair</button>
+          </div>
+        </header>
+
+        <div class="environment-banner secure" id="environment-banner">
+          <strong>Ambiente seguro</strong>
+          <span>MFA, rate limiting, autorizacao por tenant e output encoding ativos.</span>
+        </div>
+
+        <section class="auth-layout" id="auth-section">
+          <div class="auth-copy">
+            <p class="eyebrow">Acesso ao workspace</p>
+            <h2>Entre na Acme Health</h2>
+            <p>Use a conta de demonstracao para consultar faturas, registrar notas e revisar eventos de auditoria.</p>
+
+            <dl class="credentials">
+              <div><dt>E-mail</dt><dd>ana@acme.test</dd></div>
+              <div><dt>Senha</dt><dd>Secure123!</dd></div>
+              <div><dt>MFA</dt><dd>482911</dd></div>
+            </dl>
+          </div>
+
+          <form class="auth-form" id="login-form">
+            <label>
+              E-mail
+              <input id="email" name="email" type="email" value="ana@acme.test" autocomplete="username" required>
+            </label>
+            <label>
+              Senha
+              <input id="password" name="password" type="password" value="Secure123!" autocomplete="current-password" required>
+            </label>
+            <label id="mfa-field">
+              Codigo MFA
+              <input id="mfa-code" name="mfaCode" inputmode="numeric" value="482911" maxlength="6" autocomplete="one-time-code">
+            </label>
+            <button class="button button-primary" type="submit">Entrar no workspace</button>
+            <p class="form-message" id="login-message" role="status"></p>
+          </form>
+        </section>
+
+        <div class="dashboard hidden" id="dashboard">
+          <section class="metrics" id="overview" aria-label="Indicadores">
+            <article class="metric-card">
+              <span>Volume em faturas</span>
+              <strong id="metric-total">R$ 0,00</strong>
+              <small>Tenant atual</small>
+            </article>
+            <article class="metric-card">
+              <span>Faturas pendentes</span>
+              <strong id="metric-pending">0</strong>
+              <small>Aguardando liquidacao</small>
+            </article>
+            <article class="metric-card">
+              <span>Eventos monitorados</span>
+              <strong id="metric-events">0</strong>
+              <small>Ultimos registros</small>
+            </article>
+            <article class="metric-card metric-accent">
+              <span>Postura da sessao</span>
+              <strong id="metric-posture">Protegida</strong>
+              <small id="metric-mode">Ambiente seguro</small>
+            </article>
+          </section>
+
+          <section class="content-grid">
+            <article class="panel invoices-panel" id="invoices">
+              <header class="panel-header">
+                <div>
+                  <p class="eyebrow">Contas a receber</p>
+                  <h2>Faturas recentes</h2>
+                </div>
+                <span class="status-label" id="invoice-count">0 registros</span>
+              </header>
+
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Cliente</th>
+                      <th>Vencimento</th>
+                      <th>Status</th>
+                      <th>Valor</th>
+                    </tr>
+                  </thead>
+                  <tbody id="invoice-table"></tbody>
+                </table>
+              </div>
+
+              <form class="lookup-form" id="invoice-lookup-form">
+                <label for="invoice-id">Abrir fatura por ID</label>
+                <div class="inline-control">
+                  <input id="invoice-id" value="inv-2001" autocomplete="off">
+                  <button class="button button-secondary" type="submit">Consultar</button>
+                </div>
+              </form>
+
+              <div class="lookup-result empty" id="invoice-result">
+                Nenhuma consulta realizada.
+              </div>
+            </article>
+
+            <article class="panel notes-panel" id="notes">
+              <header class="panel-header">
+                <div>
+                  <p class="eyebrow">Colaboracao</p>
+                  <h2>Notas da equipe</h2>
+                </div>
+              </header>
+
+              <form class="note-form" id="note-form">
+                <label for="note-content">Nova nota</label>
+                <textarea id="note-content" rows="3" maxlength="2000" placeholder="Registre uma observacao para o time" required></textarea>
+                <div class="note-actions">
+                  <span id="note-limit">0 / 280</span>
+                  <button class="button button-primary" type="submit">Publicar nota</button>
+                </div>
+              </form>
+
+              <div class="notes-list" id="notes-list"></div>
+            </article>
+
+            <article class="panel audit-panel" id="audit">
+              <header class="panel-header">
+                <div>
+                  <p class="eyebrow">Observabilidade</p>
+                  <h2>Trilha de auditoria</h2>
+                </div>
+                <button class="button button-quiet" id="refresh-audit" type="button">Atualizar</button>
+              </header>
+              <div class="audit-list" id="audit-list"></div>
+            </article>
+
+            <article class="panel controls-panel">
+              <header class="panel-header">
+                <div>
+                  <p class="eyebrow">Controles</p>
+                  <h2>Postura atual</h2>
+                </div>
+              </header>
+              <ul class="control-list" id="control-list"></ul>
+            </article>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <div class="toast hidden" id="toast" role="status"></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
