@@ -417,17 +417,30 @@ export function createApp(options = {}) {
   return { server, store, repository };
 }
 
-export async function createConfiguredApp(env = process.env) {
-  if (env.NODE_ENV === "production" && (!env.TOKEN_SECRET || env.TOKEN_SECRET.length < 32)) {
-    throw new Error("TOKEN_SECRET must contain at least 32 characters in production.");
+const blockedProductionSecrets = new Set([
+  "local-development-secret-change-before-deploy",
+  "uma-chave-local-com-mais-de-32-caracteres"
+]);
+
+function productionTokenSecret(env) {
+  if (env.NODE_ENV !== "production") return env.TOKEN_SECRET;
+  if (!env.TOKEN_SECRET || env.TOKEN_SECRET.length < 32 || blockedProductionSecrets.has(env.TOKEN_SECRET)) {
+    throw new Error("TOKEN_SECRET must be set to a unique secret with at least 32 characters in production.");
   }
-  if (!env.DATABASE_URL) return createApp({ production: env.NODE_ENV === "production" });
+  return env.TOKEN_SECRET;
+}
+
+export async function createConfiguredApp(env = process.env) {
+  const tokenSecret = productionTokenSecret(env);
+  if (!env.DATABASE_URL) {
+    return createApp({ production: env.NODE_ENV === "production", tokenSecret });
+  }
   const repository = await createPostgresRepository(env.DATABASE_URL);
   return createApp({
     repository,
     production: env.NODE_ENV === "production",
     database: "postgresql",
-    tokenSecret: env.TOKEN_SECRET
+    tokenSecret
   });
 }
 

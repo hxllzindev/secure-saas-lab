@@ -1,6 +1,6 @@
 import test, { after, before } from "node:test";
 import assert from "node:assert/strict";
-import { createApp } from "../src/server.js";
+import { createApp, createConfiguredApp } from "../src/server.js";
 
 let server;
 let baseUrl;
@@ -145,6 +145,29 @@ test("headers defensivos incluem uma Content Security Policy estrita", async () 
   assert.match(policy, /default-src 'self'/);
   assert.match(policy, /frame-ancestors 'none'/);
   assert.doesNotMatch(policy, /unsafe-inline/);
+});
+
+test("producao rejeita TOKEN_SECRET ausente ou conhecido", async () => {
+  await assert.rejects(
+    () => createConfiguredApp({ NODE_ENV: "production" }),
+    /TOKEN_SECRET must be set/
+  );
+  await assert.rejects(
+    () => createConfiguredApp({
+      NODE_ENV: "production",
+      TOKEN_SECRET: "local-development-secret-change-before-deploy"
+    }),
+    /TOKEN_SECRET must be set/
+  );
+});
+
+test("producao aceita TOKEN_SECRET unico e forte", async () => {
+  const app = await createConfiguredApp({
+    NODE_ENV: "production",
+    TOKEN_SECRET: "portfolio-production-secret-32-characters-minimum"
+  });
+
+  await app.repository.close();
 });
 
 test("o fluxo vulneravel reproduz BOLA entre tenants", async () => {

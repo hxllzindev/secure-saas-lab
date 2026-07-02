@@ -31,7 +31,7 @@ Laboratorio fullstack de AppSec que apresenta o mesmo SaaS financeiro multi-tena
 Requer Docker Desktop.
 
 ```bash
-TOKEN_SECRET="uma-chave-local-com-mais-de-32-caracteres" docker compose up -d --build
+TOKEN_SECRET="$(openssl rand -base64 48)" docker compose up -d --build
 ```
 
 Acesse `http://127.0.0.1:3000`.

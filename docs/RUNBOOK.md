@@ -3,7 +3,7 @@
 ## Subir a stack
 
 ```bash
-TOKEN_SECRET="uma-chave-local-com-mais-de-32-caracteres" docker compose up -d --build
+TOKEN_SECRET="$(openssl rand -base64 48)" docker compose up -d --build
 docker compose ps
 ```
 
