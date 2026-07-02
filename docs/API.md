@@ -1,79 +1,49 @@
 # API
 
-Base: `/api/:mode`, onde `mode` e `secure` ou `vulnerable`.
+Base URL: `http://127.0.0.1:3000`
 
-## Publicos
+## Health
 
-### `GET /api/health`
+`GET /api/health`
 
-Retorna saude e adapter de banco ativo.
+Returns runtime status and stack metadata.
 
-### `POST /api/:mode/login`
+## Authentication
 
-```json
-{
-  "email": "ana@acme.test",
-  "password": "Secure123!",
-  "mfaCode": "482911"
-}
-```
+`POST /api/vulnerable/login`
 
-No modo seguro, define cookies `HttpOnly` e retorna `csrfToken`. No vulneravel, retorna bearer token no JSON.
+Accepts email and password. This endpoint intentionally reveals different errors for missing users and wrong passwords.
 
-## Sessao segura
+`POST /api/secure/login`
 
-### `GET /api/secure/session`
+Accepts email, password and `mfaCode`. Returns a CSRF token and sets HttpOnly cookies.
 
-Restaura usuario e CSRF token usando o access cookie.
+`POST /api/secure/session/refresh`
 
-### `POST /api/secure/session/refresh`
+Requires `X-Requested-With: AegisLedger` and a refresh cookie. Rotates the refresh token and returns a new CSRF token.
 
-Exige refresh cookie e `X-Requested-With: AegisLedger`. Rotaciona o token e devolve novo CSRF.
+## Resources
 
-### `POST /api/secure/session/logout`
+`GET /api/{mode}/session`
 
-Exige access cookie e `X-CSRF-Token`. Revoga a familia de refresh tokens.
+Returns the authenticated demo user.
 
-## Faturas
+`GET /api/{mode}/invoices`
 
-### `GET /api/:mode/invoices`
+Returns invoices for the authenticated tenant.
 
-Lista somente faturas do tenant autenticado.
+`GET /api/{mode}/invoices/{id}`
 
-### `GET /api/:mode/invoices/:id`
+In `vulnerable` mode, this intentionally allows cross-tenant lookup. In `secure` mode, ownership is enforced and cross-tenant access returns `404`.
 
-- Secure: ownership check e RLS; outro tenant recebe `404`.
-- Vulnerable: lookup deliberadamente cross-tenant.
+`GET /api/{mode}/notes`
 
-## Notas
+Lists notes for the tenant.
 
-### `GET /api/:mode/notes`
+`POST /api/{mode}/notes`
 
-Lista notas do tenant.
+Creates a note. Secure mode requires a valid `X-CSRF-Token` header and truncates/sanitizes plain text.
 
-### `POST /api/:mode/notes`
+`GET /api/secure/audit`
 
-```json
-{ "content": "Revisar o contrato." }
-```
-
-No modo seguro exige CSRF, remove caracteres de controle e limita a 280 caracteres.
-
-## Auditoria
-
-### `GET /api/secure/audit`
-
-Exige role `admin`. Retorna eventos do tenant atual com severidade e, quando aplicavel, tecnica MITRE ATT&CK.
-
-## Codigos relevantes
-
-| Status | Significado |
-| --- | --- |
-| `200` | Operacao concluida |
-| `201` | Nota criada |
-| `401` | Sessao ou credenciais invalidas |
-| `403` | Role ou CSRF invalido |
-| `404` | Recurso ausente ou nao autorizado |
-| `413` | Corpo acima de 32 KiB |
-| `422` | Entrada semanticamente invalida |
-| `429` | Rate limit atingido |
+Admin-only audit view for secure-mode evidence.

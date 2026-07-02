@@ -1,42 +1,27 @@
-# Roteiro de demonstracao
+# Demo Script
 
-Duracao sugerida: 5 a 7 minutos.
-
-## 1. Contexto
-
-"Este e um SaaS financeiro multi-tenant com duas implementacoes do mesmo fluxo. A ideia e mostrar a vulnerabilidade, o impacto, a correcao e o teste de regressao."
-
-## 2. Autenticacao
-
-1. Abra o modo vulneravel.
-2. Explique que mensagens diferentes permitem enumerar usuarios e que MFA nao e exigido.
-3. Abra o modo seguro e entre com Ana.
-4. Mostre os controles: MFA, rate limiting, cookies `HttpOnly`, CSRF e refresh rotativo.
-
-## 3. BOLA
-
-1. Consulte `inv-2001` no modo vulneravel.
-2. Mostre que Ana, da Acme, recebe uma fatura da Orbit.
-3. Repita no modo seguro.
-4. Mostre o `404` e o evento `T1190` na auditoria.
-5. Explique as duas barreiras: ownership na API e RLS no PostgreSQL.
-
-## 4. Stored XSS
-
-1. No modo vulneravel, publique `<strong>conteudo controlado</strong>`.
-2. Mostre que o navegador interpreta HTML.
-3. No modo seguro, repita e mostre que o conteudo aparece como texto.
-4. Cite CSP como defesa adicional, nao substituta do encoding.
-
-## 5. Evidencias
+## Setup
 
 ```bash
-npm test
-node scripts/verify-stack.mjs
+dotnet test SecureSaasLab.sln
+TOKEN_SECRET="$(openssl rand -base64 48)" docker compose up -d --build
 ```
 
-Mostre os workflows e explique que o sink vulneravel foi isolado e documentado como risco aceito para o laboratorio.
+Open `http://127.0.0.1:3000`.
 
-## Fechamento
+## Flow
 
-"O projeto conecta desenvolvimento, AppSec e operacao: eu consigo construir o produto, modelar as ameacas, implementar os controles e provar que eles continuam funcionando."
+1. Log in as `ana@acme.test` with password `Secure123!` and MFA `482911`.
+2. Show that vulnerable login accepts the same credentials without MFA.
+3. Query invoice `inv-2001` in vulnerable mode and show Orbit tenant data leaking to Acme.
+4. Query the same invoice in secure mode and show `404`.
+5. Create a secure note without CSRF and show the request blocked.
+6. Open audit events and point to the denied BOLA attempt.
+
+## Validation
+
+```bash
+dotnet test SecureSaasLab.sln
+```
+
+Expected result: all xUnit tests pass.

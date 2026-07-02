@@ -1,30 +1,20 @@
 # Security Policy
 
-## Escopo
+This repository is a portfolio AppSec lab. It intentionally contains a `vulnerable` mode so the secure controls can be compared against realistic failure modes.
 
-O repositorio contem vulnerabilidades intencionais exclusivamente sob o modo `vulnerable`. Elas existem para demonstracao educacional com dados ficticios.
+## Supported Scope
 
-Achados no modo `secure`, no pipeline, nas migrations, no container ou que escapem do isolamento esperado sao considerados validos.
+- ASP.NET Core API and security controls in `src/SecureSaasLab.Api`
+- Static frontend assets in `src/SecureSaasLab.Api/wwwroot`
+- xUnit regression tests in `test/SecureSaasLab.Tests`
+- GitHub Actions security gates
 
-## Reporte
+## Intentional Risk Areas
 
-Nao abra publicamente um exploit que afete uma implantacao real. Envie um relato privado ao mantenedor contendo:
+- The `vulnerable` mode demonstrates user enumeration, missing MFA and BOLA/IDOR.
+- Demo credentials and seed data are fictitious.
+- The current persistence layer is in memory for deterministic portfolio demos.
 
-- componente e versao afetados
-- pre-condicoes
-- passos minimos para reproducao
-- impacto observado
-- sugestao de correcao, quando disponivel
+## Reporting
 
-## Uso responsavel
-
-- Execute o laboratorio apenas em ambiente controlado.
-- Nao conecte dados ou credenciais reais.
-- Nao publique o modo vulneravel em uma rede nao confiavel.
-- Use as tecnicas somente em sistemas proprios ou com autorizacao explicita.
-
-## Riscos aceitos
-
-- `src/public/vulnerable-lab.js` contem um sink HTML intencional.
-- A funcao PostgreSQL `lab.lookup_invoice_unsafe` existe apenas para reproduzir BOLA.
-- Credenciais em `compose.yaml` sao exclusivas do banco local nao publicado.
+Open a GitHub issue with reproduction steps, expected impact and the affected route or file. Do not include real credentials, tokens or customer data.
