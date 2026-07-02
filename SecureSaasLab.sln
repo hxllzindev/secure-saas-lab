@@ -1,0 +1,24 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SecureSaasLab.Api", "src\SecureSaasLab.Api\SecureSaasLab.Api.csproj", "{42183C6C-84D1-4E50-A6E0-6CB3F1982637}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SecureSaasLab.Tests", "test\SecureSaasLab.Tests\SecureSaasLab.Tests.csproj", "{7468A07E-4A87-459B-82A4-83E5E9FA5461}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{42183C6C-84D1-4E50-A6E0-6CB3F1982637}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{42183C6C-84D1-4E50-A6E0-6CB3F1982637}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{42183C6C-84D1-4E50-A6E0-6CB3F1982637}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{42183C6C-84D1-4E50-A6E0-6CB3F1982637}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7468A07E-4A87-459B-82A4-83E5E9FA5461}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7468A07E-4A87-459B-82A4-83E5E9FA5461}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7468A07E-4A87-459B-82A4-83E5E9FA5461}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7468A07E-4A87-459B-82A4-83E5E9FA5461}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

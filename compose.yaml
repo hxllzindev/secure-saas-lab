@@ -1,32 +1,11 @@
 services:
-  database:
-    image: postgres:17-alpine
-    environment:
-      POSTGRES_DB: secure_saas
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres_dev_only
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./db/migrations:/docker-entrypoint-initdb.d:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d secure_saas"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-    networks:
-      - backend
-
   app:
     build:
       context: .
     environment:
-      PORT: 3000
-      NODE_ENV: production
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:3000
       TOKEN_SECRET: ${TOKEN_SECRET:?TOKEN_SECRET must be set to a unique secret with at least 32 characters}
-      DATABASE_URL: postgresql://aegis_app:aegis_app_dev@database:5432/secure_saas
-    depends_on:
-      database:
-        condition: service_healthy
     ports:
       - "3000:3000"
     read_only: true
@@ -38,12 +17,6 @@ services:
       - ALL
     networks:
       - frontend
-      - backend
 
 networks:
   frontend: {}
-  backend:
-    internal: true
-
-volumes:
-  postgres_data: {}

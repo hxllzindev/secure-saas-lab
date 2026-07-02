@@ -3,5 +3,7 @@ node_modules/
 .env
 coverage/
 *.log
+bin/
+obj/
 /devsecops-security-platform/
 /mini-siem-soc-platform/
