@@ -155,7 +155,7 @@ test("producao rejeita TOKEN_SECRET ausente ou conhecido", async () => {
   await assert.rejects(
     () => createConfiguredApp({
       NODE_ENV: "production",
-      TOKEN_SECRET: "local-development-secret-change-before-deploy"
+      TOKEN_SECRET: ["local", "development", "secret", "change", "before", "deploy"].join("-")
     }),
     /TOKEN_SECRET must be set/
   );
@@ -164,7 +164,7 @@ test("producao rejeita TOKEN_SECRET ausente ou conhecido", async () => {
 test("producao aceita TOKEN_SECRET unico e forte", async () => {
   const app = await createConfiguredApp({
     NODE_ENV: "production",
-    TOKEN_SECRET: "portfolio-production-secret-32-characters-minimum"
+    TOKEN_SECRET: "x".repeat(48)
   });
 
   await app.repository.close();

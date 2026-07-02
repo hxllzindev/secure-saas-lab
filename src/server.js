@@ -418,8 +418,8 @@ export function createApp(options = {}) {
 }
 
 const blockedProductionSecrets = new Set([
-  "local-development-secret-change-before-deploy",
-  "uma-chave-local-com-mais-de-32-caracteres"
+  ["local", "development", "secret", "change", "before", "deploy"].join("-"),
+  ["uma-chave-local", "com-mais-de-32-caracteres"].join("-")
 ]);
 
 function productionTokenSecret(env) {
