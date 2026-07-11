@@ -19,6 +19,7 @@ jobs:
       - run: dotnet restore SecureSaasLab.sln
       - run: dotnet build SecureSaasLab.sln --configuration Release --no-restore
       - run: dotnet test SecureSaasLab.sln --configuration Release --no-build
+      - run: python3 -B scripts/frontend-security-test.py
 
   semgrep:
     runs-on: ubuntu-latest

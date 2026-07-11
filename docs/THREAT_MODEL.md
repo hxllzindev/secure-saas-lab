@@ -29,9 +29,11 @@
 - Browser to ASP.NET Core API.
 - Secure-mode cookies and CSRF token.
 - CI workflow supply chain through pinned GitHub Actions.
+- Explicit boundary between the isolated training mode and a production deployment.
 
 ## Residual Risks
 
 - Data is in memory for deterministic demos.
 - MFA codes are static for portfolio usability.
+- `ALLOW_INSECURE_LAB=true` intentionally restores exploitable behavior and is safe only with fictitious data on loopback.
 - A production version would need persistent storage, OIDC, distributed rate limiting and managed secrets.
