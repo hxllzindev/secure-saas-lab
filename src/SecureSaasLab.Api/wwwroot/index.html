@@ -21,7 +21,6 @@
         <nav class="primary-nav" aria-label="Navegacao principal">
           <button class="nav-item active" type="button" data-target="overview">Visao geral</button>
           <button class="nav-item" type="button" data-target="invoices">Faturas</button>
-          <button class="nav-item" type="button" data-target="notes">Notas</button>
           <button class="nav-item" type="button" data-target="audit">Auditoria</button>
         </nav>
 
@@ -39,12 +38,8 @@
           </div>
 
           <div class="topbar-actions">
-            <div class="mode-control" role="group" aria-label="Ambiente da aplicacao">
-              <button type="button" data-mode="vulnerable">Vulneravel</button>
-              <button class="active" type="button" data-mode="secure">Seguro</button>
-            </div>
             <div class="user-chip" id="user-chip">
-              <span class="avatar">AS</span>
+              <span class="avatar">WD</span>
               <span>
                 <strong>Visitante</strong>
                 <small>Sem sessao</small>
@@ -62,28 +57,22 @@
         <section class="auth-layout" id="auth-section">
           <div class="auth-copy">
             <p class="eyebrow">Acesso ao workspace</p>
-            <h2>Entre na Acme Health</h2>
-            <p>Use a conta de demonstracao para consultar faturas, registrar notas e revisar eventos de auditoria.</p>
-
-            <dl class="credentials">
-              <div><dt>E-mail</dt><dd>ana@acme.test</dd></div>
-              <div><dt>Senha</dt><dd>Secure123!</dd></div>
-              <div><dt>MFA</dt><dd>482911</dd></div>
-            </dl>
+            <h2>Entre no workspace sintetico</h2>
+            <p>As credenciais de laboratorio sao fornecidas fora do bundle publico. O frontend nao inclui contas, segredos ou dados pessoais predefinidos.</p>
           </div>
 
           <form class="auth-form" id="login-form">
             <label>
-              E-mail
-              <input id="email" name="email" type="email" value="ana@acme.test" autocomplete="username" required>
+              Conta de laboratorio
+              <input id="email" name="email" type="text" maxlength="254" autocomplete="username" required>
             </label>
             <label>
               Senha
-              <input id="password" name="password" type="password" value="Secure123!" autocomplete="current-password" required>
+              <input id="password" name="password" type="password" maxlength="256" autocomplete="current-password" required>
             </label>
             <label id="mfa-field">
               Codigo MFA
-              <input id="mfa-code" name="mfaCode" inputmode="numeric" value="482911" maxlength="6" autocomplete="one-time-code">
+              <input id="mfa-code" name="mfaCode" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required>
             </label>
             <button class="button button-primary" type="submit">Entrar no workspace</button>
             <p class="form-message" id="login-message" role="status"></p>
@@ -93,9 +82,9 @@
         <div class="dashboard hidden" id="dashboard">
           <section class="metrics" id="overview" aria-label="Indicadores">
             <article class="metric-card">
-              <span>Volume em faturas</span>
+              <span>Faturas no workspace</span>
               <strong id="metric-total">R$ 0,00</strong>
-              <small>Tenant atual</small>
+              <small>Somente contagem sintetica</small>
             </article>
             <article class="metric-card">
               <span>Faturas pendentes</span>
@@ -129,10 +118,9 @@
                   <thead>
                     <tr>
                       <th>ID</th>
-                      <th>Cliente</th>
                       <th>Vencimento</th>
                       <th>Status</th>
-                      <th>Valor</th>
+                      <th>Faixa</th>
                     </tr>
                   </thead>
                   <tbody id="invoice-table"></tbody>
@@ -150,26 +138,6 @@
               <div class="lookup-result empty" id="invoice-result">
                 Nenhuma consulta realizada.
               </div>
-            </article>
-
-            <article class="panel notes-panel" id="notes">
-              <header class="panel-header">
-                <div>
-                  <p class="eyebrow">Colaboracao</p>
-                  <h2>Notas da equipe</h2>
-                </div>
-              </header>
-
-              <form class="note-form" id="note-form">
-                <label for="note-content">Nova nota</label>
-                <textarea id="note-content" rows="3" maxlength="2000" placeholder="Registre uma observacao para o time" required></textarea>
-                <div class="note-actions">
-                  <span id="note-limit">0 / 280</span>
-                  <button class="button button-primary" type="submit">Publicar nota</button>
-                </div>
-              </form>
-
-              <div class="notes-list" id="notes-list"></div>
             </article>
 
             <article class="panel audit-panel" id="audit">

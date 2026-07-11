@@ -1,21 +1,11 @@
-import { renderVulnerableContent } from "./vulnerable-lab.js";
+"use strict";
 
-const state = {
-  mode: "secure",
-  token: null,
-  csrfToken: null,
-  user: null,
-  invoices: [],
-  notes: [],
-  events: []
-};
-
+const state = { user: null, invoices: [], events: [] };
 const elements = {
   authSection: document.querySelector("#auth-section"),
   dashboard: document.querySelector("#dashboard"),
   loginForm: document.querySelector("#login-form"),
   loginMessage: document.querySelector("#login-message"),
-  mfaField: document.querySelector("#mfa-field"),
   banner: document.querySelector("#environment-banner"),
   userChip: document.querySelector("#user-chip"),
   logoutButton: document.querySelector("#logout-button"),
@@ -23,10 +13,6 @@ const elements = {
   invoiceCount: document.querySelector("#invoice-count"),
   invoiceLookupForm: document.querySelector("#invoice-lookup-form"),
   invoiceResult: document.querySelector("#invoice-result"),
-  noteForm: document.querySelector("#note-form"),
-  noteContent: document.querySelector("#note-content"),
-  noteLimit: document.querySelector("#note-limit"),
-  notesList: document.querySelector("#notes-list"),
   auditList: document.querySelector("#audit-list"),
   refreshAudit: document.querySelector("#refresh-audit"),
   controlList: document.querySelector("#control-list"),
@@ -38,26 +24,9 @@ const elements = {
   toast: document.querySelector("#toast")
 };
 
-const currency = new Intl.NumberFormat("pt-BR", {
-  style: "currency",
-  currency: "BRL"
-});
-
 const dateTime = new Intl.DateTimeFormat("pt-BR", {
-  day: "2-digit",
-  month: "short",
-  hour: "2-digit",
-  minute: "2-digit"
+  day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit"
 });
-
-function initials(name) {
-  return name
-    .split(" ")
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase();
-}
 
 function showToast(message) {
   elements.toast.textContent = message;
@@ -66,7 +35,7 @@ function showToast(message) {
   showToast.timer = window.setTimeout(() => elements.toast.classList.add("hidden"), 3200);
 }
 
-async function refreshSecureSession() {
+async function refreshSession() {
   const response = await fetch("/api/secure/session/refresh", {
     method: "POST",
     credentials: "same-origin",
@@ -74,312 +43,229 @@ async function refreshSecureSession() {
   });
   if (!response.ok) return false;
   const payload = await response.json();
-  state.csrfToken = payload.csrfToken;
   state.user = payload.user;
   renderUser();
   return true;
 }
 
 async function api(path, options = {}, retry = true) {
-  const method = options.method ?? "GET";
-  const response = await fetch(`/api/${state.mode}${path}`, {
+  const response = await fetch(`/api/secure${path}`, {
     ...options,
     credentials: "same-origin",
     headers: {
       "Content-Type": "application/json",
       "X-Requested-With": "AegisLedger",
-      ...(state.mode === "vulnerable" && state.token ? { Authorization: `Bearer ${state.token}` } : {}),
-      ...(state.mode === "secure" && method !== "GET" && state.csrfToken
-        ? { "X-CSRF-Token": state.csrfToken }
-        : {}),
       ...(options.headers ?? {})
     }
   });
-
-  const payload = await response.json();
-  if (response.status === 401 && state.mode === "secure" && state.user && retry && !path.includes("/refresh")) {
-    const refreshed = await refreshSecureSession();
-    if (refreshed) return api(path, options, false);
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 401 && state.user && retry && !path.includes("/refresh")) {
+    if (await refreshSession()) return api(path, options, false);
   }
   if (!response.ok) {
-    const error = new Error(payload.error ?? "Falha na requisicao.");
-    error.status = response.status;
-    throw error;
+    const safeMessage = response.status === 401
+      ? "Sessao invalida ou expirada."
+      : response.status === 403
+        ? "Operacao nao permitida."
+        : response.status === 404
+          ? "Registro sintetico nao encontrado."
+          : "Operacao indisponivel.";
+    throw new Error(safeMessage);
   }
   return payload;
 }
 
-function updateModeUi() {
-  document.querySelectorAll("[data-mode]").forEach((button) => {
-    button.classList.toggle("active", button.dataset.mode === state.mode);
-  });
-
-  const secure = state.mode === "secure";
-  elements.banner.className = `environment-banner ${state.mode}`;
-  elements.banner.innerHTML = secure
-    ? "<strong>Ambiente seguro</strong><span>MFA, rate limiting, autorizacao por tenant e output encoding ativos.</span>"
-    : "<strong>Ambiente vulneravel</strong><span>Enumeracao de usuarios, ausencia de MFA, BOLA e HTML nao confiavel ativos.</span>";
-  elements.mfaField.classList.toggle("hidden", !secure);
-  elements.noteContent.maxLength = secure ? 280 : 2000;
-  updateNoteLimit();
-  renderControls();
-}
-
 function resetSession() {
-  state.token = null;
-  state.csrfToken = null;
   state.user = null;
   state.invoices = [];
-  state.notes = [];
   state.events = [];
   elements.authSection.classList.remove("hidden");
   elements.dashboard.classList.add("hidden");
   elements.logoutButton.classList.add("hidden");
-  elements.userChip.innerHTML = '<span class="avatar">AS</span><span><strong>Visitante</strong><small>Sem sessao</small></span>';
+  elements.userChip.replaceChildren();
+  const avatar = document.createElement("span");
+  const labels = document.createElement("span");
+  const title = document.createElement("strong");
+  const subtitle = document.createElement("small");
+  avatar.className = "avatar";
+  avatar.textContent = "WD";
+  title.textContent = "Visitante";
+  subtitle.textContent = "Sem sessao";
+  labels.append(title, subtitle);
+  elements.userChip.append(avatar, labels);
   elements.loginMessage.textContent = "";
 }
 
 function renderUser() {
-  elements.userChip.innerHTML = `
-    <span class="avatar">${initials(state.user.name)}</span>
-    <span><strong>${state.user.name}</strong><small>${state.user.tenantName}</small></span>
-  `;
+  elements.userChip.replaceChildren();
+  const avatar = document.createElement("span");
+  const labels = document.createElement("span");
+  const title = document.createElement("strong");
+  const subtitle = document.createElement("small");
+  avatar.className = "avatar";
+  avatar.textContent = "WD";
+  title.textContent = state.user?.displayLabel ?? "Workspace de demonstracao";
+  subtitle.textContent = state.user?.role === "admin" ? "Perfil administrativo" : "Perfil de leitura";
+  labels.append(title, subtitle);
+  elements.userChip.append(avatar, labels);
   elements.logoutButton.classList.remove("hidden");
 }
 
-function renderMetrics() {
-  const total = state.invoices.reduce((sum, invoice) => sum + invoice.amount, 0);
-  const pending = state.invoices.filter((invoice) => invoice.status !== "paid").length;
-  const secure = state.mode === "secure";
-  elements.metricTotal.textContent = currency.format(total);
-  elements.metricPending.textContent = String(pending);
-  elements.metricEvents.textContent = String(state.events.length);
-  elements.metricPosture.textContent = secure ? "Protegida" : "Exposta";
-  elements.metricMode.textContent = secure ? "Ambiente seguro" : "Ambiente vulneravel";
+function statusText(status) {
+  return { paid: "Pago", pending: "Pendente", overdue: "Vencido" }[status] ?? "Desconhecido";
 }
 
-function statusText(status) {
-  return {
-    paid: "Pago",
-    pending: "Pendente",
-    overdue: "Vencido"
-  }[status] ?? status;
+function safeDate(value, withTime = false) {
+  const parsed = new Date(withTime ? value : `${value}T12:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return "Indisponivel";
+  return withTime ? dateTime.format(parsed) : parsed.toLocaleDateString("pt-BR", { timeZone: "UTC" });
 }
 
 function renderInvoices() {
   elements.invoiceTable.replaceChildren();
-  for (const invoice of state.invoices) {
+  for (const invoice of state.invoices.slice(0, 100)) {
     const row = document.createElement("tr");
-    row.innerHTML = `
-      <td class="table-id"></td>
-      <td></td>
-      <td></td>
-      <td><span class="badge badge-${invoice.status}"></span></td>
-      <td></td>
-    `;
-    const cells = row.querySelectorAll("td");
-    cells[0].textContent = invoice.id;
-    cells[1].textContent = invoice.customer;
-    cells[2].textContent = new Date(`${invoice.dueDate}T12:00:00`).toLocaleDateString("pt-BR");
-    cells[3].querySelector("span").textContent = statusText(invoice.status);
-    cells[4].textContent = currency.format(invoice.amount);
-    elements.invoiceTable.append(row);
+    const id = document.createElement("td");
+    const due = document.createElement("td");
+    const status = document.createElement("td");
+    const band = document.createElement("td");
+    const badge = document.createElement("span");
+    id.className = "table-id";
+    id.textContent = String(invoice.id ?? "").slice(0, 32);
+    due.textContent = safeDate(invoice.dueDate);
+    badge.className = ["paid", "pending", "overdue"].includes(invoice.status)
+      ? `badge badge-${invoice.status}` : "badge";
+    badge.textContent = statusText(invoice.status);
+    status.appendChild(badge);
+    band.textContent = ["Faixa A", "Faixa B", "Faixa C"].includes(invoice.amountBand)
+      ? invoice.amountBand : "Indisponivel";
+    row.append(id, due, status, band);
+    elements.invoiceTable.appendChild(row);
   }
-  elements.invoiceCount.textContent = `${state.invoices.length} registros`;
-}
-
-function renderNotes() {
-  elements.notesList.replaceChildren();
-
-  if (state.notes.length === 0) {
-    elements.notesList.innerHTML = '<div class="empty-state">Nenhuma nota publicada.</div>';
-    return;
-  }
-
-  for (const note of state.notes) {
-    const item = document.createElement("article");
-    item.className = "note-item";
-    const meta = document.createElement("div");
-    meta.className = "note-meta";
-    const author = document.createElement("strong");
-    const time = document.createElement("time");
-    author.textContent = note.author;
-    time.textContent = dateTime.format(new Date(note.createdAt));
-    meta.append(author, time);
-
-    const content = document.createElement("p");
-    content.className = "note-content";
-    if (state.mode === "vulnerable") {
-      renderVulnerableContent(content, note.content);
-    } else {
-      content.textContent = note.content;
-    }
-
-    item.append(meta, content);
-    elements.notesList.append(item);
-  }
+  elements.invoiceCount.textContent = `${state.invoices.length} registros sinteticos`;
 }
 
 function actionLabel(action) {
   return {
-    login_success: "Login concluido",
-    login_failed: "Falha de autenticacao",
-    login_blocked: "Login bloqueado",
-    invoice_viewed: "Fatura consultada",
-    invoice_access_denied: "Acesso a fatura negado",
-    note_created: "Nota publicada",
-    csrf_blocked: "Requisicao CSRF bloqueada",
-    session_refreshed: "Sessao renovada",
-    refresh_reuse_detected: "Reutilizacao de token detectada",
-    refresh_failed: "Falha ao renovar sessao",
-    logout: "Sessao encerrada"
-  }[action] ?? action;
+    login_success: "Login concluido", login_failed: "Falha de autenticacao",
+    login_blocked: "Login bloqueado", invoice_viewed: "Fatura consultada",
+    invoice_access_denied: "Acesso negado", csrf_blocked: "Origem bloqueada",
+    session_refreshed: "Sessao renovada", refresh_reuse_detected: "Reutilizacao detectada",
+    refresh_failed: "Falha ao renovar sessao", logout: "Sessao encerrada"
+  }[action] ?? "Evento de seguranca";
 }
 
 function renderAudit() {
   elements.auditList.replaceChildren();
-
-  if (state.mode !== "secure") {
-    elements.auditList.innerHTML = '<div class="empty-state">Auditoria indisponivel neste ambiente.</div>';
-    return;
-  }
-
   if (state.events.length === 0) {
-    elements.auditList.innerHTML = '<div class="empty-state">Nenhum evento para o tenant atual.</div>';
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "Nenhum evento sintetico disponivel.";
+    elements.auditList.appendChild(empty);
     return;
   }
-
-  for (const event of state.events) {
+  for (const event of state.events.slice(0, 30)) {
     const item = document.createElement("article");
-    item.className = "audit-item";
     const detail = document.createElement("div");
     const title = document.createElement("strong");
     const description = document.createElement("p");
     const mode = document.createElement("span");
     const detection = document.createElement("span");
+    item.className = "audit-item";
     title.textContent = actionLabel(event.action);
-    description.textContent = `${event.actor ?? event.email ?? "Sistema"} · ${dateTime.format(new Date(event.createdAt))}${event.resourceId ? ` · ${event.resourceId}` : ""}`;
+    description.textContent = safeDate(event.createdAt, true);
     mode.className = "event-mode";
-    mode.textContent = event.mode;
-    detection.className = `detection-label severity-${event.severity ?? "info"}`;
-    detection.textContent = event.techniqueId
-      ? `${event.techniqueId} · ${event.techniqueName}`
-      : (event.severity ?? "info");
-    detail.append(detection);
-    detail.append(title, description);
+    mode.textContent = "secure";
+    const severity = ["info", "low", "medium", "high"].includes(event.severity) ? event.severity : "info";
+    detection.className = `detection-label severity-${severity}`;
+    detection.textContent = ["T1078", "T1190"].includes(event.techniqueId) ? event.techniqueId : severity;
+    detail.append(detection, title, description);
     item.append(detail, mode);
-    elements.auditList.append(item);
+    elements.auditList.appendChild(item);
   }
 }
 
 function renderControls() {
-  const secure = state.mode === "secure";
   const controls = [
-    ["Autenticacao multifator", secure],
-    ["Rate limiting no login", secure],
-    ["Autorizacao por tenant", secure],
-    ["PostgreSQL Row-Level Security", secure],
-    ["Cookies HttpOnly e SameSite", secure],
-    ["Refresh token rotativo", secure],
-    ["Protecao CSRF", secure],
-    ["Output encoding", secure],
-    ["Auditoria administrativa", secure]
+    "Autenticacao multifator", "Rate limiting no login", "Autorizacao por tenant",
+    "PostgreSQL Row-Level Security", "Cookies HttpOnly e SameSite", "Refresh rotativo",
+    "Validacao de mesma origem", "Output encoding", "Auditoria administrativa"
   ];
-
   elements.controlList.replaceChildren();
-  for (const [label, active] of controls) {
+  for (const label of controls) {
     const item = document.createElement("li");
     const name = document.createElement("span");
     const status = document.createElement("span");
     name.textContent = label;
-    status.textContent = active ? "Ativo" : "Inativo";
-    status.className = `control-state${active ? "" : " off"}`;
+    status.textContent = "Ativo";
+    status.className = "control-state";
     item.append(name, status);
-    elements.controlList.append(item);
+    elements.controlList.appendChild(item);
   }
+}
+
+function renderMetrics() {
+  elements.metricTotal.textContent = String(state.invoices.length);
+  elements.metricPending.textContent = String(state.invoices.filter((invoice) => invoice.status !== "paid").length);
+  elements.metricEvents.textContent = String(state.events.length);
+  elements.metricPosture.textContent = "Protegida";
+  elements.metricMode.textContent = "Ambiente seguro";
 }
 
 async function loadInvoices() {
   const payload = await api("/invoices");
-  state.invoices = payload.invoices;
+  state.invoices = Array.isArray(payload.invoices) ? payload.invoices : [];
   renderInvoices();
 }
 
-async function loadNotes() {
-  const payload = await api("/notes");
-  state.notes = payload.notes;
-  renderNotes();
-}
-
 async function loadAudit() {
-  if (state.mode !== "secure" || state.user.role !== "admin") {
+  if (state.user?.role !== "admin") {
     state.events = [];
-    renderAudit();
-    renderMetrics();
-    return;
-  }
-
-  try {
-    const payload = await api("/audit");
-    state.events = payload.events;
-  } catch (error) {
-    state.events = [];
-    showToast(error.message);
+  } else {
+    try {
+      const payload = await api("/audit");
+      state.events = Array.isArray(payload.events) ? payload.events : [];
+    } catch {
+      state.events = [];
+      showToast("Auditoria indisponivel.");
+    }
   }
   renderAudit();
   renderMetrics();
 }
 
 async function loadDashboard() {
-  await Promise.all([loadInvoices(), loadNotes()]);
+  await loadInvoices();
   await loadAudit();
   renderMetrics();
 }
-
-document.querySelectorAll("[data-mode]").forEach((button) => {
-  button.addEventListener("click", () => {
-    if (button.dataset.mode === state.mode) return;
-    state.mode = button.dataset.mode;
-    resetSession();
-    updateModeUi();
-  });
-});
 
 elements.loginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   elements.loginMessage.textContent = "Autenticando...";
   const form = new FormData(elements.loginForm);
-
   try {
     const session = await api("/login", {
       method: "POST",
       body: JSON.stringify({
-        email: form.get("email"),
-        password: form.get("password"),
-        mfaCode: form.get("mfaCode")
+        email: form.get("email"), password: form.get("password"), mfaCode: form.get("mfaCode")
       })
     });
-    state.token = session.token;
-    state.csrfToken = session.csrfToken ?? null;
     state.user = session.user;
+    elements.loginForm.reset();
     elements.authSection.classList.add("hidden");
     elements.dashboard.classList.remove("hidden");
     renderUser();
     await loadDashboard();
-    showToast(`Sessao iniciada em ambiente ${state.mode}.`);
-  } catch (error) {
-    elements.loginMessage.textContent = error.message;
+    showToast("Sessao segura iniciada.");
+  } catch {
+    elements.loginForm.reset();
+    elements.loginMessage.textContent = "Nao foi possivel autenticar.";
   }
 });
 
 elements.logoutButton.addEventListener("click", async () => {
-  if (state.mode === "secure") {
-    try {
-      await api("/session/logout", { method: "POST", body: "{}" }, false);
-    } catch {
-      // The local session is cleared even when the server is unreachable.
-    }
-  }
+  try { await api("/session/logout", { method: "POST", body: "{}" }, false); } catch { /* local reset follows */ }
   resetSession();
 });
 
@@ -388,43 +274,20 @@ elements.invoiceLookupForm.addEventListener("submit", async (event) => {
   const invoiceId = document.querySelector("#invoice-id").value.trim();
   elements.invoiceResult.className = "lookup-result empty";
   elements.invoiceResult.textContent = "Consultando...";
-
   try {
     const { invoice } = await api(`/invoices/${encodeURIComponent(invoiceId)}`);
+    const status = statusText(invoice.status);
+    const band = ["Faixa A", "Faixa B", "Faixa C"].includes(invoice.amountBand) ? invoice.amountBand : "Indisponivel";
     elements.invoiceResult.className = "lookup-result";
-    elements.invoiceResult.textContent = `${invoice.id} · ${invoice.customer} · ${currency.format(invoice.amount)} · tenant: ${invoice.tenantId}`;
-  } catch (error) {
+    elements.invoiceResult.textContent = `${String(invoice.id).slice(0, 32)} · ${status} · ${band}`;
+  } catch {
     elements.invoiceResult.className = "lookup-result denied";
-    elements.invoiceResult.textContent = error.message;
+    elements.invoiceResult.textContent = "Registro sintetico indisponivel.";
   }
   await loadAudit();
 });
 
-function updateNoteLimit() {
-  const max = state.mode === "secure" ? 280 : 2000;
-  elements.noteLimit.textContent = `${elements.noteContent.value.length} / ${max}`;
-}
-
-elements.noteContent.addEventListener("input", updateNoteLimit);
-
-elements.noteForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  try {
-    await api("/notes", {
-      method: "POST",
-      body: JSON.stringify({ content: elements.noteContent.value })
-    });
-    elements.noteContent.value = "";
-    updateNoteLimit();
-    await Promise.all([loadNotes(), loadAudit()]);
-    showToast("Nota publicada.");
-  } catch (error) {
-    showToast(error.message);
-  }
-});
-
 elements.refreshAudit.addEventListener("click", loadAudit);
-
 document.querySelectorAll(".nav-item").forEach((button) => {
   button.addEventListener("click", () => {
     document.querySelectorAll(".nav-item").forEach((item) => item.classList.remove("active"));
@@ -436,33 +299,27 @@ document.querySelectorAll(".nav-item").forEach((button) => {
   });
 });
 
-async function restoreSecureSession() {
+async function restoreSession() {
   try {
     let response = await fetch("/api/secure/session", {
-      credentials: "same-origin",
-      headers: { "X-Requested-With": "AegisLedger" }
+      credentials: "same-origin", headers: { "X-Requested-With": "AegisLedger" }
     });
-    if (response.status === 401) {
-      const refreshed = await refreshSecureSession();
-      if (!refreshed) return;
+    if (response.status === 401 && await refreshSession()) {
       response = await fetch("/api/secure/session", {
-        credentials: "same-origin",
-        headers: { "X-Requested-With": "AegisLedger" }
+        credentials: "same-origin", headers: { "X-Requested-With": "AegisLedger" }
       });
     }
     if (!response.ok) return;
     const session = await response.json();
     state.user = session.user;
-    state.csrfToken = session.csrfToken;
     elements.authSection.classList.add("hidden");
     elements.dashboard.classList.remove("hidden");
     renderUser();
     await loadDashboard();
-  } catch {
-    resetSession();
-  }
+  } catch { resetSession(); }
 }
 
-updateModeUi();
+elements.banner.className = "environment-banner secure";
+renderControls();
 resetSession();
-restoreSecureSession();
+restoreSession();

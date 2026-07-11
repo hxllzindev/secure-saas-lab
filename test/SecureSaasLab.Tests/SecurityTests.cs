@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Xunit;
 
@@ -53,13 +54,17 @@ public sealed class SecurityTests : IClassFixture<WebApplicationFactory<Program>
     }
 
     [Fact]
-    public async Task SecureSessionUsesHttpOnlyCookiesAndCsrf()
+    public async Task SecureSessionUsesHttpOnlyCookiesWithoutBrowserTokens()
     {
         var login = await LoginSecure();
         Assert.Equal(HttpStatusCode.OK, login.Response.StatusCode);
         Assert.Contains(login.Cookies, cookie => cookie.Contains("HttpOnly") && cookie.Contains("SameSite=Strict"));
-        Assert.True(login.Payload.RootElement.TryGetProperty("csrfToken", out _));
+        Assert.False(login.Payload.RootElement.TryGetProperty("csrfToken", out _));
         Assert.False(login.Payload.RootElement.TryGetProperty("token", out _));
+        var user = login.Payload.RootElement.GetProperty("user");
+        Assert.False(user.TryGetProperty("email", out _));
+        Assert.False(user.TryGetProperty("tenantId", out _));
+        Assert.False(user.TryGetProperty("name", out _));
     }
 
     [Fact]
@@ -91,11 +96,62 @@ public sealed class SecurityTests : IClassFixture<WebApplicationFactory<Program>
         Assert.Equal(HttpStatusCode.Forbidden, csrf.StatusCode);
     }
 
+    [Fact]
+    public async Task SecureLogoutRequiresSameOriginMetadata()
+    {
+        var login = await LoginSecure();
+        var withoutCsrf = new HttpRequestMessage(HttpMethod.Post, "/api/secure/session/logout") { Content = JsonContent.Create(new { }) };
+        withoutCsrf.Headers.Add("Cookie", login.CookieHeader);
+        Assert.Equal(HttpStatusCode.Forbidden, (await _client.SendAsync(withoutCsrf)).StatusCode);
+
+        var sameOrigin = new HttpRequestMessage(HttpMethod.Post, "/api/secure/session/logout") { Content = JsonContent.Create(new { }) };
+        sameOrigin.Headers.Add("Cookie", login.CookieHeader);
+        AddSameOriginHeaders(sameOrigin);
+        Assert.Equal(HttpStatusCode.OK, (await _client.SendAsync(sameOrigin)).StatusCode);
+    }
+
+    [Fact]
+    public async Task ConcurrentRefreshAllowsOnlyOneRotation()
+    {
+        var login = await LoginSecure();
+        HttpRequestMessage RefreshRequest()
+        {
+            var request = new HttpRequestMessage(HttpMethod.Post, "/api/secure/session/refresh") { Content = JsonContent.Create(new { }) };
+            request.Headers.Add("Cookie", login.CookieHeader);
+            request.Headers.Add("X-Requested-With", "AegisLedger");
+            AddSameOriginHeaders(request);
+            return request;
+        }
+
+        var responses = await Task.WhenAll(_client.SendAsync(RefreshRequest()), _client.SendAsync(RefreshRequest()));
+        Assert.Single(responses, response => response.StatusCode == HttpStatusCode.OK);
+        Assert.Single(responses, response => response.StatusCode == HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task ProductionDisablesVulnerableModeWithoutExplicitOptIn()
+    {
+        await using var productionFactory = new WebApplicationFactory<Program>().WithWebHostBuilder(webHost =>
+        {
+            webHost.UseEnvironment("Production");
+            webHost.UseSetting("TOKEN_SECRET", new string('x', 48));
+        });
+        using var productionClient = productionFactory.CreateClient();
+        var response = await productionClient.PostAsJsonAsync("/api/vulnerable/login", new { email = "ana@acme.test", password = "Secure123!" });
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
     private async Task<(HttpResponseMessage Response, JsonDocument Payload, string[] Cookies, string CookieHeader)> LoginSecure()
     {
         var response = await _client.PostAsJsonAsync("/api/secure/login", new { email = "ana@acme.test", password = "Secure123!", mfaCode = "482911" });
         var payload = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
         var cookies = response.Headers.TryGetValues("Set-Cookie", out var values) ? values.ToArray() : [];
         return (response, payload, cookies, string.Join("; ", cookies.Select(cookie => cookie.Split(';')[0])));
+    }
+
+    private static void AddSameOriginHeaders(HttpRequestMessage request)
+    {
+        request.Headers.Add("Origin", "http://localhost");
+        request.Headers.Add("Sec-Fetch-Site", "same-origin");
     }
 }

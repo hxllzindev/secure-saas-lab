@@ -6,8 +6,9 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:3000
       TOKEN_SECRET: ${TOKEN_SECRET:?TOKEN_SECRET must be set to a unique secret with at least 32 characters}
+      ALLOW_INSECURE_LAB: "true"
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     read_only: true
     tmpfs:
       - /tmp:size=16m,noexec,nosuid
