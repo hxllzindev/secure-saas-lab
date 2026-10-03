@@ -2,22 +2,47 @@ namespace SecureSaasLab.Api;
 
 public sealed class LabStore
 {
+    public const int MaxAuditEvents = 5000;
+    public const int MaxNotesPerTenant = 500;
+
     public object SyncRoot { get; } = new();
     public List<UserAccount> Users { get; init; } = [];
     public List<Invoice> Invoices { get; init; } = [];
     public List<Note> Notes { get; init; } = [];
-    public List<AuditEvent> AuditEvents { get; init; } = [];
+    public Queue<AuditEvent> AuditEvents { get; init; } = new();
     public Dictionary<string, List<DateTimeOffset>> LoginAttempts { get; init; } = [];
     public Dictionary<string, RefreshSession> RefreshSessions { get; init; } = [];
 
     public void AddAudit(AuditEvent auditEvent)
     {
-        lock (SyncRoot) AuditEvents.Add(auditEvent);
+        lock (SyncRoot)
+        {
+            AuditEvents.Enqueue(auditEvent);
+            while (AuditEvents.Count > MaxAuditEvents) AuditEvents.Dequeue();
+        }
     }
 
-    public void AddNote(Note note)
+    public bool TryAddNote(Note note)
     {
-        lock (SyncRoot) Notes.Add(note);
+        lock (SyncRoot)
+        {
+            if (Notes.Count(item => item.TenantId == note.TenantId) >= MaxNotesPerTenant) return false;
+            Notes.Add(note);
+            return true;
+        }
+    }
+
+    public void PurgeStaleRefreshSessions(DateTimeOffset now)
+    {
+        lock (SyncRoot)
+        {
+            var cutoff = now.AddHours(-1);
+            var staleHashes = RefreshSessions
+                .Where(pair => pair.Value.ExpiresAt < cutoff || pair.Value.RevokedAt is { } revokedAt && revokedAt < cutoff)
+                .Select(pair => pair.Key)
+                .ToArray();
+            foreach (var staleHash in staleHashes) RefreshSessions.Remove(staleHash);
+        }
     }
 
     public Note[] NotesForTenant(string tenantId)
@@ -31,7 +56,29 @@ public sealed class LabStore
     }
 }
 
-public sealed record UserAccount(string Id, string Name, string Email, string TenantId, string TenantName, string Role, string MfaCode, string Password);
+public sealed class UserAccount
+{
+    public UserAccount(string id, string name, string email, string tenantId, string tenantName, string role, string mfaCode, PasswordCredential passwordCredential)
+    {
+        Id = id;
+        Name = name;
+        Email = email;
+        TenantId = tenantId;
+        TenantName = tenantName;
+        Role = role;
+        MfaCode = mfaCode;
+        PasswordCredential = passwordCredential;
+    }
+
+    public string Id { get; }
+    public string Name { get; }
+    public string Email { get; }
+    public string TenantId { get; }
+    public string TenantName { get; }
+    public string Role { get; }
+    public string MfaCode { get; }
+    public PasswordCredential PasswordCredential { get; }
+}
 public sealed record Invoice(string Id, string TenantId, string Customer, decimal Amount, string Status, string DueDate);
 public sealed record Note(string Id, string TenantId, string Author, string Content, string CreatedAt);
 public sealed record PublicUser(string DisplayLabel, string Role);

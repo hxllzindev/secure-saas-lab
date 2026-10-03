@@ -1,19 +1,19 @@
 using SecureSaasLab.Api;
 
 var builder = WebApplication.CreateBuilder(args);
+var tokenSecret = builder.Configuration["TOKEN_SECRET"];
+ValidateTokenSecret(tokenSecret, !builder.Environment.IsDevelopment());
 builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 64 * 1024);
 builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.MaxDepth = 16);
-var configuredSecret = builder.Configuration["TOKEN_SECRET"] ?? Environment.GetEnvironmentVariable("TOKEN_SECRET");
-if (builder.Environment.IsProduction() && (string.IsNullOrWhiteSpace(configuredSecret) || configuredSecret.Length < 32))
-{
-    throw new InvalidOperationException("TOKEN_SECRET must be set to a unique secret with at least 32 characters in production.");
-}
 builder.Services.AddSingleton(Seed.Create());
-builder.Services.AddSingleton(new TokenService(configuredSecret ?? TokenService.OpaqueToken()));
+builder.Services.AddSingleton(new TokenService(tokenSecret ?? TokenService.OpaqueToken()));
 
 var app = builder.Build();
-var secureCookies = app.Environment.IsProduction();
-var vulnerableModeEnabled = !app.Environment.IsProduction() || builder.Configuration.GetValue<bool>("ALLOW_INSECURE_LAB");
+var hardened = !app.Environment.IsDevelopment();
+var secureCookies = hardened;
+var vulnerableModeEnabled = builder.Configuration.GetValue<bool>("ALLOW_INSECURE_LAB");
+if (vulnerableModeEnabled)
+    app.Logger.LogWarning("MODO VULNERAVEL HABILITADO (ALLOW_INSECURE_LAB=true). Use apenas em laboratorio local isolado, com dados ficticios.");
 var accessCookie = secureCookies ? "__Host-aegis_access" : "aegis_access";
 var refreshCookie = secureCookies ? "__Secure-aegis_refresh" : "aegis_refresh";
 
@@ -71,7 +71,9 @@ app.MapPost("/api/{mode}/login", (string mode, LoginRequest input, HttpContext h
         http.Response.Headers["Retry-After"] = retryAfter.ToString();
         return Results.Json(new { error = "Nao foi possivel autenticar. Tente novamente mais tarde." }, statusCode: 429);
     }
-    if (user is null || !SecurityControls.VerifyPassword(input.Password, user) || input.MfaCode != user.MfaCode)
+    var passwordValid = SecurityControls.VerifyPassword(input.Password, user);
+    var mfaValid = SecurityControls.VerifyMfaCode(input.MfaCode, user);
+    if (user is null || !passwordValid || !mfaValid)
     {
         store.AddAudit(AuditEvent.Create("login_failed", mode, null, user?.TenantId, null, "invalid_credentials"));
         return Results.Json(new { error = "Credenciais invalidas." }, statusCode: 401);
@@ -80,11 +82,13 @@ app.MapPost("/api/{mode}/login", (string mode, LoginRequest input, HttpContext h
     var familyId = Guid.NewGuid().ToString();
     var refresh = TokenService.OpaqueToken();
     var refreshHash = TokenService.Hash(refresh);
-    var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-    var access = tokens.Sign(new TokenPayload(user.Id, user.TenantId, user.Role, mode, "access", familyId, now + SecurityControls.AccessTokenTtlSeconds));
+    var now = DateTimeOffset.UtcNow;
+    var nowUnix = now.ToUnixTimeSeconds();
+    var access = tokens.Sign(new TokenPayload(user.Id, user.TenantId, user.Role, mode, "access", familyId, nowUnix + SecurityControls.AccessTokenTtlSeconds));
     lock (store.SyncRoot)
     {
-        store.RefreshSessions[refreshHash] = new RefreshSession { TokenHash = refreshHash, FamilyId = familyId, UserId = user.Id, TenantId = user.TenantId, ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(SecurityControls.RefreshTokenTtlSeconds) };
+        store.PurgeStaleRefreshSessions(now);
+        store.RefreshSessions[refreshHash] = new RefreshSession { TokenHash = refreshHash, FamilyId = familyId, UserId = user.Id, TenantId = user.TenantId, ExpiresAt = now.AddSeconds(SecurityControls.RefreshTokenTtlSeconds) };
     }
     SecurityControls.ResetRateLimit(store, $"account:{rateKey}");
     http.Response.Headers.Append("Set-Cookie", SecurityControls.Cookie(accessCookie, access, SecurityControls.AccessTokenTtlSeconds, "/", secureCookies));
@@ -97,11 +101,18 @@ app.MapPost("/api/secure/session/refresh", (HttpContext http, LabStore store, To
 {
     if (http.Request.Headers["X-Requested-With"] != "AegisLedger") return Results.Json(new { error = "Requisicao de refresh rejeitada." }, statusCode: 403);
     if (!ValidateSameOriginWrite(http)) return Results.Json(new { error = "Requisicao rejeitada." }, statusCode: 403);
+    var ip = http.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+    if (!SecurityControls.CheckRateLimit(store, $"refresh-ip:{ip}", out var retryAfter, 20))
+    {
+        http.Response.Headers["Retry-After"] = retryAfter.ToString();
+        return Results.Json(new { error = "Nao foi possivel renovar a sessao. Tente novamente mais tarde." }, statusCode: 429);
+    }
     var refresh = http.Request.Cookies[refreshCookie];
     if (string.IsNullOrWhiteSpace(refresh)) return Results.Json(new { error = "Refresh token ausente." }, statusCode: 401);
     var hash = TokenService.Hash(refresh);
     lock (store.SyncRoot)
     {
+        store.PurgeStaleRefreshSessions(DateTimeOffset.UtcNow);
         if (!store.RefreshSessions.TryGetValue(hash, out var current))
         {
             store.AddAudit(AuditEvent.Create("refresh_failed", "secure", null, null, null, "unknown_token"));
@@ -185,7 +196,7 @@ IResult CreateNote(HttpContext http, LabStore store, AuthSession session, string
     var content = mode == "secure" ? SecurityControls.SanitizePlainText(rawContent) : rawContent[..Math.Min(rawContent.Length, 2000)];
     if (string.IsNullOrWhiteSpace(content)) return Results.Json(new { error = "A nota nao pode ficar vazia." }, statusCode: 422);
     var note = new Note($"note-{Guid.NewGuid()}", session.User.TenantId, session.User.Name, content, DateTimeOffset.UtcNow.ToString("O"));
-    store.AddNote(note);
+    if (!store.TryAddNote(note)) return Results.Json(new { error = "Limite de notas do workspace atingido." }, statusCode: 422);
     store.AddAudit(AuditEvent.Create("note_created", mode, session.User.Name, session.User.TenantId, note.Id));
     return Results.Created($"/api/{mode}/notes/{note.Id}", new { note = mode == "secure" ? (object)SecurityControls.Public(note) : note });
 }
@@ -209,6 +220,19 @@ static bool ValidateSameOriginWrite(HttpContext http)
     var expectedOrigin = $"{http.Request.Scheme}://{http.Request.Host}";
     return string.Equals(http.Request.Headers["Sec-Fetch-Site"], "same-origin", StringComparison.Ordinal) &&
         string.Equals(http.Request.Headers["Origin"], expectedOrigin, StringComparison.OrdinalIgnoreCase);
+}
+
+static void ValidateTokenSecret(string? secret, bool required)
+{
+    if (string.IsNullOrWhiteSpace(secret))
+    {
+        if (required) throw new InvalidOperationException("TOKEN_SECRET obrigatorio fora de Development.");
+        return;
+    }
+    var weak = secret.Length < 32
+        || secret.Contains("replace-with", StringComparison.OrdinalIgnoreCase)
+        || secret.Distinct().Count() < 12;
+    if (weak) throw new InvalidOperationException("TOKEN_SECRET fraco: use >= 32 chars aleatorios (openssl rand -base64 48).");
 }
 
 public partial class Program;
