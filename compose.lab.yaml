@@ -1,0 +1,5 @@
+# Override que liga o laboratorio inseguro. Somente local, dados ficticios.
+services:
+  app:
+    environment:
+      ALLOW_INSECURE_LAB: "true"

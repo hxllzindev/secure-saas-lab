@@ -25,13 +25,25 @@ dotnet run --project src/SecureSaasLab.Api/SecureSaasLab.Api.csproj
 
 Acesse `http://127.0.0.1:3000`.
 
+Para habilitar as rotas vulneráveis localmente:
+
+```bash
+ALLOW_INSECURE_LAB=true dotnet run --project src/SecureSaasLab.Api/SecureSaasLab.Api.csproj
+```
+
 Com Docker:
 
 ```bash
 TOKEN_SECRET="$(openssl rand -base64 48)" docker compose up -d --build
 ```
 
-O Compose publica a porta somente em `127.0.0.1` e habilita explicitamente o laboratório inseguro. Em qualquer implantação real, não defina `ALLOW_INSECURE_LAB`; no ambiente `Production`, as rotas vulneráveis ficam desabilitadas por padrão.
+Esse Compose inicia somente o modo seguro e publica a porta em `127.0.0.1`. Para executar o laboratório vulnerável, use o override explicitamente:
+
+```bash
+TOKEN_SECRET="$(openssl rand -base64 48)" docker compose -f compose.yaml -f compose.lab.yaml up -d --build
+```
+
+Não habilite `ALLOW_INSECURE_LAB` em implantações reais.
 
 ## Testes
 
