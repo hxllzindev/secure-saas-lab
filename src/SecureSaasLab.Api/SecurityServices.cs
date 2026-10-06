@@ -39,19 +39,54 @@ public sealed class TokenService
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 }
 
+public sealed class PasswordCredential
+{
+    private const int Iterations = 600_000;
+    private const int HashSize = 32;
+
+    private PasswordCredential(byte[] salt, byte[] hash)
+    {
+        Salt = salt;
+        Hash = hash;
+    }
+
+    private byte[] Salt { get; }
+    private byte[] Hash { get; }
+
+    public static PasswordCredential Create(string password)
+    {
+        var salt = RandomNumberGenerator.GetBytes(16);
+        var hash = Rfc2898DeriveBytes.Pbkdf2(password, salt, Iterations, HashAlgorithmName.SHA256, HashSize);
+        return new PasswordCredential(salt, hash);
+    }
+
+    public bool Verify(string? password)
+    {
+        if (password is null or { Length: > 256 }) return false;
+        var candidate = Rfc2898DeriveBytes.Pbkdf2(password ?? "", Salt, Iterations, HashAlgorithmName.SHA256, HashSize);
+        return CryptographicOperations.FixedTimeEquals(candidate, Hash);
+    }
+}
+
 public static class SecurityControls
 {
     public const int AccessTokenTtlSeconds = 300;
     public const int VulnerableTokenTtlSeconds = 1200;
     public const int RefreshTokenTtlSeconds = 604800;
+    public const int MaxLoginAttemptKeys = 10_000;
     private static readonly Regex ControlChars = new("[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F]", RegexOptions.Compiled);
+    private static readonly PasswordCredential DummyPasswordCredential = PasswordCredential.Create("not-a-real-user-password");
+    private static readonly byte[] DummyMfaCode = Encoding.ASCII.GetBytes("000000");
 
     public static string NormalizeEmail(string? value) => value?.Trim().ToLowerInvariant() ?? "";
     public static bool ValidLoginShape(LoginRequest input) =>
         input.Email is { Length: > 2 and <= 254 } &&
         input.Password is { Length: > 0 and <= 256 } &&
         input.MfaCode is { Length: 6 } && input.MfaCode.All(char.IsAsciiDigit);
-    public static bool VerifyPassword(string? password, UserAccount user) => password == user.Password;
+    public static bool VerifyPassword(string? password, UserAccount? user) =>
+        (user?.PasswordCredential ?? DummyPasswordCredential).Verify(password);
+    public static bool VerifyMfaCode(string? code, UserAccount? user) =>
+        CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(code ?? ""), user is null ? DummyMfaCode : Encoding.ASCII.GetBytes(user.MfaCode));
     public static string SanitizePlainText(string? value, int maxLength = 280)
     {
         var clean = ControlChars.Replace(value ?? "", "").Trim();
@@ -63,9 +98,24 @@ public static class SecurityControls
         lock (store.SyncRoot)
         {
             var now = DateTimeOffset.UtcNow;
-            var recent = store.LoginAttempts.GetValueOrDefault(key, []).Where(item => now - item < TimeSpan.FromMinutes(1)).ToList();
+            var window = TimeSpan.FromMinutes(1);
+            if (store.LoginAttempts.Count >= MaxLoginAttemptKeys)
+            {
+                var staleKeys = store.LoginAttempts
+                    .Where(pair => pair.Value.All(item => now - item >= window))
+                    .Select(pair => pair.Key)
+                    .ToArray();
+                foreach (var staleKey in staleKeys) store.LoginAttempts.Remove(staleKey);
+            }
+
+            var recent = store.LoginAttempts.GetValueOrDefault(key, []).Where(item => now - item < window).ToList();
             retryAfter = recent.Count > 0 ? Math.Max(1, 60 - (int)(now - recent[0]).TotalSeconds) : 0;
             if (recent.Count >= maxAttempts) { store.LoginAttempts[key] = recent; return false; }
+            if (!store.LoginAttempts.ContainsKey(key) && store.LoginAttempts.Count >= MaxLoginAttemptKeys)
+            {
+                retryAfter = 60;
+                return false;
+            }
             recent.Add(now);
             store.LoginAttempts[key] = recent;
             return true;

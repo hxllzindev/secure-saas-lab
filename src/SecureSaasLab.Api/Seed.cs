@@ -2,14 +2,16 @@ namespace SecureSaasLab.Api;
 
 public static class Seed
 {
+    private static readonly UserAccount[] DemoUsers =
+    [
+        new("usr-acme-admin", "Ana Silva", "ana@acme.test", "acme", "Acme Health", "admin", "482911", PasswordCredential.Create("Secure123!")),
+        new("usr-acme-analyst", "Caio Mendes", "caio@acme.test", "acme", "Acme Health", "analyst", "731204", PasswordCredential.Create("Secure123!")),
+        new("usr-orbit-admin", "Bruno Lima", "bruno@orbit.test", "orbit", "Orbit Logistics", "admin", "195730", PasswordCredential.Create("Secure123!"))
+    ];
+
     public static LabStore Create() => new()
     {
-        Users =
-        [
-            new("usr-acme-admin", "Ana Silva", "ana@acme.test", "acme", "Acme Health", "admin", "482911", "Secure123!"),
-            new("usr-acme-analyst", "Caio Mendes", "caio@acme.test", "acme", "Acme Health", "analyst", "731204", "Secure123!"),
-            new("usr-orbit-admin", "Bruno Lima", "bruno@orbit.test", "orbit", "Orbit Logistics", "admin", "195730", "Secure123!")
-        ],
+        Users = [.. DemoUsers],
         Invoices =
         [
             new("inv-1001", "acme", "Clinica Horizonte", 12480.90m, "paid", "2026-06-04"),
